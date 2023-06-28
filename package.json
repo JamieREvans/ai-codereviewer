@@ -7,6 +7,7 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc",
+    "bundle": "yarn build && yarn package",
     "package": "ncc build --source-map --license licenses.txt",
     "format": "prettier --write .",
     "lint": "prettier --check ."
@@ -23,6 +24,8 @@
     "@types/node": "^18.15.5",
     "@vercel/ncc": "^0.36.1",
     "prettier": "^2.8.6",
-    "typescript": "^5.0.2"
+    "typescript": "^5.0.2",
+    "webpack": "^5.88.1",
+    "webpack-cli": "^5.1.4"
   }
 }

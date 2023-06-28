@@ -4,9 +4,27 @@ import { Configuration, OpenAIApi } from "openai";
 import { Octokit } from "@octokit/rest";
 import parseDiff, { Chunk, File } from "parse-diff";
 import minimatch from "minimatch";
+import { inspect } from "util";
+import { exec as execCb } from 'child_process';
+import { promisify } from 'util';
+
+const exec = promisify(execCb);
+
+async function runGitCommand(command: string): Promise<string> {
+    try {
+        const { stdout } = await exec(`git ${command}`);
+
+        return stdout;
+    } catch (error) {
+        console.error(`exec error: ${error}`);
+
+        throw error;
+    }
+}
 
 const GITHUB_TOKEN: string = core.getInput("GITHUB_TOKEN");
 const OPENAI_API_KEY: string = core.getInput("OPENAI_API_KEY");
+const DEBUG_LOG_PREFIX: string = "[DEBUG]:";
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
@@ -15,6 +33,10 @@ const configuration = new Configuration({
 });
 
 const openai = new OpenAIApi(configuration);
+
+function debugLog(...args: any[]): void {
+  console.log(DEBUG_LOG_PREFIX, ...args);
+}
 
 interface PRDetails {
   owner: string;
@@ -79,22 +101,6 @@ async function analyzeCode(
   return comments;
 }
 
-async function getBaseAndHeadShas(
-  owner: string,
-  repo: string,
-  pull_number: number
-): Promise<{ baseSha: string; headSha: string }> {
-  const prResponse = await octokit.pulls.get({
-    owner,
-    repo,
-    pull_number,
-  });
-  return {
-    baseSha: prResponse.data.base.sha,
-    headSha: prResponse.data.head.sha,
-  };
-}
-
 function createPrompt(file: File, chunk: Chunk, prDetails: PRDetails): string {
   return `Your task is to review pull requests. Instructions:
 - Provide the response in following JSON format:  [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
@@ -132,7 +138,7 @@ async function getAIResponse(prompt: string): Promise<Array<{
   reviewComment: string;
 }> | null> {
   const queryConfig = {
-    model: "gpt-4",
+    model: "gpt-3.5-turbo",
     temperature: 0.2,
     max_tokens: 700,
     top_p: 1,
@@ -154,8 +160,7 @@ async function getAIResponse(prompt: string): Promise<Array<{
     const res = response.data.choices[0].message?.content?.trim() || "[]";
     return JSON.parse(res);
   } catch (error) {
-    console.error("Error:", error);
-    return null;
+    throw error;
   }
 }
 
@@ -211,18 +216,7 @@ async function main() {
     const newBaseSha = eventData.before;
     const newHeadSha = eventData.after;
 
-    const response = await octokit.repos.compareCommits({
-      owner: prDetails.owner,
-      repo: prDetails.repo,
-      base: newBaseSha,
-      head: newHeadSha,
-    });
-
-    diff = response.data.diff_url
-      ? await octokit
-          .request({ url: response.data.diff_url })
-          .then((res) => res.data)
-      : null;
+    diff = await runGitCommand(`diff ${newBaseSha}..${newHeadSha}`);
   } else {
     console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
     return;
@@ -247,6 +241,9 @@ async function main() {
   });
 
   const comments = await analyzeCode(filteredDiff, prDetails);
+
+  debugLog("Found comments", comments.length);
+
   if (comments.length > 0) {
     await createReviewComment(
       prDetails.owner,
@@ -258,6 +255,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Error:", error);
+  console.error("Error:", inspect(error));
   process.exit(1);
 });

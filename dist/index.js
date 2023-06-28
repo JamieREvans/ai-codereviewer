@@ -48,13 +48,33 @@ const openai_1 = __nccwpck_require__(9211);
 const rest_1 = __nccwpck_require__(5375);
 const parse_diff_1 = __importDefault(__nccwpck_require__(4833));
 const minimatch_1 = __importDefault(__nccwpck_require__(2002));
+const util_1 = __nccwpck_require__(3837);
+const child_process_1 = __nccwpck_require__(2081);
+const util_2 = __nccwpck_require__(3837);
+const exec = (0, util_2.promisify)(child_process_1.exec);
+function runGitCommand(command) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const { stdout } = yield exec(`git ${command}`);
+            return stdout;
+        }
+        catch (error) {
+            console.error(`exec error: ${error}`);
+            throw error;
+        }
+    });
+}
 const GITHUB_TOKEN = core.getInput("GITHUB_TOKEN");
 const OPENAI_API_KEY = core.getInput("OPENAI_API_KEY");
+const DEBUG_LOG_PREFIX = "[DEBUG]:";
 const octokit = new rest_1.Octokit({ auth: GITHUB_TOKEN });
 const configuration = new openai_1.Configuration({
     apiKey: OPENAI_API_KEY,
 });
 const openai = new openai_1.OpenAIApi(configuration);
+function debugLog(...args) {
+    console.log(DEBUG_LOG_PREFIX, ...args);
+}
 function getPRDetails() {
     var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
@@ -105,19 +125,6 @@ function analyzeCode(parsedDiff, prDetails) {
         return comments;
     });
 }
-function getBaseAndHeadShas(owner, repo, pull_number) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const prResponse = yield octokit.pulls.get({
-            owner,
-            repo,
-            pull_number,
-        });
-        return {
-            baseSha: prResponse.data.base.sha,
-            headSha: prResponse.data.head.sha,
-        };
-    });
-}
 function createPrompt(file, chunk, prDetails) {
     return `Your task is to review pull requests. Instructions:
 - Provide the response in following JSON format:  [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
@@ -151,7 +158,7 @@ function getAIResponse(prompt) {
     var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
         const queryConfig = {
-            model: "gpt-4",
+            model: "gpt-3.5-turbo",
             temperature: 0.2,
             max_tokens: 700,
             top_p: 1,
@@ -169,8 +176,7 @@ function getAIResponse(prompt) {
             return JSON.parse(res);
         }
         catch (error) {
-            console.error("Error:", error);
-            return null;
+            throw error;
         }
     });
 }
@@ -209,17 +215,7 @@ function main() {
         else if (eventData.action === "synchronize") {
             const newBaseSha = eventData.before;
             const newHeadSha = eventData.after;
-            const response = yield octokit.repos.compareCommits({
-                owner: prDetails.owner,
-                repo: prDetails.repo,
-                base: newBaseSha,
-                head: newHeadSha,
-            });
-            diff = response.data.diff_url
-                ? yield octokit
-                    .request({ url: response.data.diff_url })
-                    .then((res) => res.data)
-                : null;
+            diff = yield runGitCommand(`diff ${newBaseSha}..${newHeadSha}`);
         }
         else {
             console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
@@ -238,13 +234,14 @@ function main() {
             return !excludePatterns.some((pattern) => { var _a; return (0, minimatch_1.default)((_a = file.to) !== null && _a !== void 0 ? _a : "", pattern); });
         });
         const comments = yield analyzeCode(filteredDiff, prDetails);
+        debugLog("Found comments", comments.length);
         if (comments.length > 0) {
             yield createReviewComment(prDetails.owner, prDetails.repo, prDetails.pull_number, comments);
         }
     });
 }
 main().catch((error) => {
-    console.error("Error:", error);
+    console.error("Error:", (0, util_1.inspect)(error));
     process.exit(1);
 });
 
@@ -16837,6 +16834,14 @@ module.exports = eval("require")("encoding");
 
 "use strict";
 module.exports = require("assert");
+
+/***/ }),
+
+/***/ 2081:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("child_process");
 
 /***/ }),
 
