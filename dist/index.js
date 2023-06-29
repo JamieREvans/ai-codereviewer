@@ -1,6 +1,97 @@
 require('./sourcemap-register.js');/******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
+/***/ 6524:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getDiffExcludingMerges = exports.getDiffPairsExcludingMerges = exports.runGitCommand = void 0;
+const child_process_1 = __nccwpck_require__(2081);
+const util_1 = __nccwpck_require__(3837);
+const exec = (0, util_1.promisify)(child_process_1.exec);
+function runGitCommand(command) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const { stdout } = yield exec(`git ${command}`);
+            return stdout;
+        }
+        catch (error) {
+            console.error(`exec error: ${error}`);
+            throw error;
+        }
+    });
+}
+exports.runGitCommand = runGitCommand;
+function getDiffPairsExcludingMerges(previousHead, newHead) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Get all commits between previousHead and newHead, including merge commits
+        const logCommand = `log --pretty=format:"%H %P" ${previousHead}..${newHead}`;
+        const logResult = yield runGitCommand(logCommand);
+        // Split the log output into lines
+        const lines = logResult.split('\n');
+        // Initialize an array to hold the diff pairs
+        const diffPairs = [];
+        // Initialize a variable to hold the previous non-merge commit hash
+        let prevNonMergeHash = newHead;
+        // Iterate over the lines in reverse order
+        for (let i = lines.length - 1; i >= 0; i--) {
+            // Split the line into words
+            const words = lines[i].split(' ');
+            // The commit hash is the first word
+            const commitHash = words[0];
+            // If the line has more than two words, it's a merge commit
+            const isMergeCommit = words.length > 2;
+            if (!isMergeCommit) {
+                // This is a non-merge commit, so add a diff pair from this commit to the previous non-merge commit
+                diffPairs.push([commitHash, prevNonMergeHash]);
+                // Update the previous non-merge commit hash
+                prevNonMergeHash = commitHash;
+            }
+        }
+        // Add a diff pair from previousHead to the last non-merge commit
+        diffPairs.push([previousHead, prevNonMergeHash]);
+        return diffPairs;
+    });
+}
+exports.getDiffPairsExcludingMerges = getDiffPairsExcludingMerges;
+function getDiffExcludingMerges(previousHead, newHead) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Get the diff pairs excluding merges
+        const diffPairs = yield getDiffPairsExcludingMerges(previousHead, newHead);
+        // Initialize a variable to hold the full diff
+        let fullDiff = '';
+        // Iterate over the diff pairs
+        for (const [fromHash, toHash] of diffPairs) {
+            // Get the diff between the two hashes
+            const diffCommand = `diff ${fromHash} ${toHash}`;
+            const diffResult = yield runGitCommand(diffCommand);
+            // Add the diff to the full diff
+            fullDiff += diffResult;
+        }
+        // If the full diff is empty, return null
+        if (fullDiff.trim() === '') {
+            return null;
+        }
+        // Otherwise, return the full diff
+        return fullDiff;
+    });
+}
+exports.getDiffExcludingMerges = getDiffExcludingMerges;
+
+
+/***/ }),
+
 /***/ 3109:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -49,21 +140,7 @@ const rest_1 = __nccwpck_require__(5375);
 const parse_diff_1 = __importDefault(__nccwpck_require__(4833));
 const minimatch_1 = __importDefault(__nccwpck_require__(2002));
 const util_1 = __nccwpck_require__(3837);
-const child_process_1 = __nccwpck_require__(2081);
-const util_2 = __nccwpck_require__(3837);
-const exec = (0, util_2.promisify)(child_process_1.exec);
-function runGitCommand(command) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const { stdout } = yield exec(`git ${command}`);
-            return stdout;
-        }
-        catch (error) {
-            console.error(`exec error: ${error}`);
-            throw error;
-        }
-    });
-}
+const git_helpers_1 = __nccwpck_require__(6524);
 const GITHUB_TOKEN = core.getInput("GITHUB_TOKEN");
 const OPENAI_API_KEY = core.getInput("OPENAI_API_KEY");
 const DEBUG_LOG_PREFIX = "[DEBUG]:";
@@ -215,7 +292,7 @@ function main() {
         else if (eventData.action === "synchronize") {
             const newBaseSha = eventData.before;
             const newHeadSha = eventData.after;
-            diff = yield runGitCommand(`diff ${newBaseSha}..${newHeadSha}`);
+            diff = yield (0, git_helpers_1.getDiffExcludingMerges)(newBaseSha, newHeadSha);
         }
         else {
             console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);

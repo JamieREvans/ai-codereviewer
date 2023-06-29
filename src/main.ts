@@ -5,22 +5,7 @@ import { Octokit } from "@octokit/rest";
 import parseDiff, { Chunk, File } from "parse-diff";
 import minimatch from "minimatch";
 import { inspect } from "util";
-import { exec as execCb } from 'child_process';
-import { promisify } from 'util';
-
-const exec = promisify(execCb);
-
-async function runGitCommand(command: string): Promise<string> {
-    try {
-        const { stdout } = await exec(`git ${command}`);
-
-        return stdout;
-    } catch (error) {
-        console.error(`exec error: ${error}`);
-
-        throw error;
-    }
-}
+import { getDiffExcludingMerges } from "./git-helpers";
 
 const GITHUB_TOKEN: string = core.getInput("GITHUB_TOKEN");
 const OPENAI_API_KEY: string = core.getInput("OPENAI_API_KEY");
@@ -216,7 +201,7 @@ async function main() {
     const newBaseSha = eventData.before;
     const newHeadSha = eventData.after;
 
-    diff = await runGitCommand(`diff ${newBaseSha}..${newHeadSha}`);
+    diff = await getDiffExcludingMerges(newBaseSha, newHeadSha);
   } else {
     console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
     return;
