@@ -5,7 +5,7 @@ import { Octokit } from "@octokit/rest";
 import parseDiff, { Chunk, File } from "parse-diff";
 import minimatch from "minimatch";
 import { inspect } from "util";
-import { getDiff, hasNonMergeCommitsBetween } from "./git-helpers";
+import { getDiff, hasNonMergeCommitsBetween, runFetch } from "./git-helpers";
 
 const GITHUB_TOKEN: string = core.getInput("GITHUB_TOKEN");
 const OPENAI_API_KEY: string = core.getInput("OPENAI_API_KEY");
@@ -200,6 +200,8 @@ async function main() {
   } else if (eventData.action === "synchronize") {
     const newBaseSha = eventData.before;
     const newHeadSha = eventData.after;
+
+    await runFetch();
 
     // TODO: Fix getDiffExcludingMerges and use that instead
     if (await hasNonMergeCommitsBetween(newBaseSha, newHeadSha)) {

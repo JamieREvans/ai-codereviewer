@@ -16,7 +16,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getDiffExcludingMerges = exports.getDiffPairsExcludingMerges = exports.hasNonMergeCommitsBetween = exports.getDiff = exports.runGitCommand = void 0;
+exports.getDiffExcludingMerges = exports.getDiffPairsExcludingMerges = exports.hasNonMergeCommitsBetween = exports.getDiff = exports.runFetch = exports.runGitCommand = void 0;
 const child_process_1 = __nccwpck_require__(2081);
 const util_1 = __nccwpck_require__(3837);
 const exec = (0, util_1.promisify)(child_process_1.exec);
@@ -33,6 +33,12 @@ function runGitCommand(command) {
     });
 }
 exports.runGitCommand = runGitCommand;
+function runFetch() {
+    return __awaiter(this, void 0, void 0, function* () {
+        yield runGitCommand('fetch');
+    });
+}
+exports.runFetch = runFetch;
 function getDiff(previousHead, newHead) {
     return __awaiter(this, void 0, void 0, function* () {
         const command = `diff ${previousHead}..${newHead}`;
@@ -307,6 +313,7 @@ function main() {
         else if (eventData.action === "synchronize") {
             const newBaseSha = eventData.before;
             const newHeadSha = eventData.after;
+            yield (0, git_helpers_1.runFetch)();
             // TODO: Fix getDiffExcludingMerges and use that instead
             if (yield (0, git_helpers_1.hasNonMergeCommitsBetween)(newBaseSha, newHeadSha)) {
                 diff = yield (0, git_helpers_1.getDiff)(newBaseSha, newHeadSha);

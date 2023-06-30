@@ -15,6 +15,10 @@ export async function runGitCommand(command: string): Promise<string> {
     }
 }
 
+export async function runFetch(): Promise<void> {
+    await runGitCommand('fetch');
+}
+
 export async function getDiff(previousHead: string, newHead: string): Promise<string | null> {
     const command = `diff ${previousHead}..${newHead}`;
     return await runGitCommand(command);
