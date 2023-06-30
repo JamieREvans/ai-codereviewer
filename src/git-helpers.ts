@@ -15,6 +15,17 @@ export async function runGitCommand(command: string): Promise<string> {
     }
 }
 
+export async function getDiff(previousHead: string, newHead: string): Promise<string | null> {
+    const command = `diff ${previousHead}..${newHead}`;
+    return await runGitCommand(command);
+}
+
+export async function hasNonMergeCommitsBetween(previousHead: string, newHead: string): Promise<boolean> {
+    const command = `log --no-merges ${previousHead}..${newHead}`;
+    const result = await runGitCommand(command);
+    return result.trim() !== '';
+}
+
 export async function getDiffPairsExcludingMerges(previousHead: string, newHead: string): Promise<Array<[string, string]>> {
     // Get all commits between previousHead and newHead, including merge commits
     const logCommand = `log --pretty=format:"%H %P" ${previousHead}..${newHead}`;

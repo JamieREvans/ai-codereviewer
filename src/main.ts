@@ -5,7 +5,7 @@ import { Octokit } from "@octokit/rest";
 import parseDiff, { Chunk, File } from "parse-diff";
 import minimatch from "minimatch";
 import { inspect } from "util";
-import { getDiffExcludingMerges } from "./git-helpers";
+import { getDiff, hasNonMergeCommitsBetween } from "./git-helpers";
 
 const GITHUB_TOKEN: string = core.getInput("GITHUB_TOKEN");
 const OPENAI_API_KEY: string = core.getInput("OPENAI_API_KEY");
@@ -49,7 +49,7 @@ async function getPRDetails(): Promise<PRDetails> {
   };
 }
 
-async function getDiff(
+async function getFullPRDiff(
   owner: string,
   repo: string,
   pull_number: number
@@ -192,7 +192,7 @@ async function main() {
   );
 
   if (eventData.action === "opened") {
-    diff = await getDiff(
+    diff = await getFullPRDiff(
       prDetails.owner,
       prDetails.repo,
       prDetails.pull_number
@@ -201,7 +201,13 @@ async function main() {
     const newBaseSha = eventData.before;
     const newHeadSha = eventData.after;
 
-    diff = await getDiffExcludingMerges(newBaseSha, newHeadSha);
+    // TODO: Fix getDiffExcludingMerges and use that instead
+    if (await hasNonMergeCommitsBetween(newBaseSha, newHeadSha)) {
+      diff = await getDiff(newBaseSha, newHeadSha);
+    } else {
+      debugLog('No action required - synchronize only contained merge commits');
+      return;
+    }
   } else {
     console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
     return;

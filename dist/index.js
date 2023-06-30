@@ -16,7 +16,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getDiffExcludingMerges = exports.getDiffPairsExcludingMerges = exports.runGitCommand = void 0;
+exports.getDiffExcludingMerges = exports.getDiffPairsExcludingMerges = exports.hasNonMergeCommitsBetween = exports.getDiff = exports.runGitCommand = void 0;
 const child_process_1 = __nccwpck_require__(2081);
 const util_1 = __nccwpck_require__(3837);
 const exec = (0, util_1.promisify)(child_process_1.exec);
@@ -33,6 +33,21 @@ function runGitCommand(command) {
     });
 }
 exports.runGitCommand = runGitCommand;
+function getDiff(previousHead, newHead) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const command = `diff ${previousHead}..${newHead}`;
+        return yield runGitCommand(command);
+    });
+}
+exports.getDiff = getDiff;
+function hasNonMergeCommitsBetween(previousHead, newHead) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const command = `log --no-merges ${previousHead}..${newHead}`;
+        const result = yield runGitCommand(command);
+        return result.trim() !== '';
+    });
+}
+exports.hasNonMergeCommitsBetween = hasNonMergeCommitsBetween;
 function getDiffPairsExcludingMerges(previousHead, newHead) {
     return __awaiter(this, void 0, void 0, function* () {
         // Get all commits between previousHead and newHead, including merge commits
@@ -170,7 +185,7 @@ function getPRDetails() {
         };
     });
 }
-function getDiff(owner, repo, pull_number) {
+function getFullPRDiff(owner, repo, pull_number) {
     return __awaiter(this, void 0, void 0, function* () {
         const response = yield octokit.pulls.get({
             owner,
@@ -287,12 +302,19 @@ function main() {
         let diff;
         const eventData = JSON.parse((0, fs_1.readFileSync)((_a = process.env.GITHUB_EVENT_PATH) !== null && _a !== void 0 ? _a : "", "utf8"));
         if (eventData.action === "opened") {
-            diff = yield getDiff(prDetails.owner, prDetails.repo, prDetails.pull_number);
+            diff = yield getFullPRDiff(prDetails.owner, prDetails.repo, prDetails.pull_number);
         }
         else if (eventData.action === "synchronize") {
             const newBaseSha = eventData.before;
             const newHeadSha = eventData.after;
-            diff = yield (0, git_helpers_1.getDiffExcludingMerges)(newBaseSha, newHeadSha);
+            // TODO: Fix getDiffExcludingMerges and use that instead
+            if (yield (0, git_helpers_1.hasNonMergeCommitsBetween)(newBaseSha, newHeadSha)) {
+                diff = yield (0, git_helpers_1.getDiff)(newBaseSha, newHeadSha);
+            }
+            else {
+                debugLog('No action required - synchronize only contained merge commits');
+                return;
+            }
         }
         else {
             console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
